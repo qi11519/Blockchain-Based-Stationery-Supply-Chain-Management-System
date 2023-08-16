@@ -1,0 +1,13 @@
+--Start Up React.js Webpage in VSCODE--
+
+Make sure directory is changed beforehand. (cd supply_chain)
+
+Node.js:-
+1.1. Create another terminal.
+1.2. Change directory to 
+1.3. run "node backend/server.js"
+
+Front-End:-
+2.1. Create another terminal.
+2.2. run "npm start"
+

@@ -1,0 +1,25 @@
+.nav-option:hover {
+    background-color: #2b4572;
+    color: white;
+}
+  
+.nav-option {
+    color: white;
+    background-color: #1c3155;
+    text-decoration: none;
+}
+
+.logout-option {
+    bottom: 0px;
+    
+    width: auto;
+    text-align: center;
+    color: rgb(147, 136, 238);
+    background-color: #131551;
+}
+
+.logout-option:hover{
+    color: #dd6386;
+    background-color: #55232b;
+}
+

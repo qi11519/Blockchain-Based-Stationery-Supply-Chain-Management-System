@@ -1,0 +1,243 @@
+
+INSTRUCTION
+
+Ps:
+-Execute command on Linux CLI / Virtual Machine (Ubuntu WSL)
+-Docker Desktop is required (Installed on Window/Linux or Virtual Machine)
+-Golang library is installed on Linux/ Virtual Machine (Ubuntu WSL)
+
+
+
+- DIRECTORY: 
+cd supplychain_fabric/test-network
+Ps2. Make sure this directory is located within Linux / Virtual Machine (Ubuntu WSL) (under ./home)
+
+
+
+- Environment Variable: //Ps3. Environment variable stores at '~/.bashrc file', run 'nano ~/.bashrc'
+
+export PATH=${PWD}/../bin:$PATH
+//Copy everything in supplychain_fabric/bin into \\wsl.localhost\Ubuntu\usr\local\bin
+//So this PATH can work
+
+
+
+export FABRIC_CFG_PATH=${PWD}/configtx
+
+//To check if Environment Variable is working properly
+configtxgen --help 
+
+
+
+//////////////////////////////////////////////////////////////////////////////////////////////////
+//Jump To Line 130 For Shorter Setup Command
+//////////////////////////////////////////////////////////////////////////////////////////////////
+//Because following section can be skipped
+
+- START NETWORK: 
+./network.sh up createChannel -c channel1
+
+>>CREATE CHANNEL SECTION<<
+
+configtxgen -profile AllOrgsChannel -outputCreateChannelTx ./channel-artifacts/channel1.tx -channelID channel1
+
+export FABRIC_CFG_PATH=$PWD/../config/
+
+- Admin of Company Branch:
+export CORE_PEER_TLS_ENABLED=true
+export CORE_PEER_LOCALMSPID="CompanyBranchMSP"
+export CORE_PEER_TLS_ROOTCERT_FILE=${PWD}/organizations/peerOrganizations/companybranch.example.com/peers/peer0.companybranch.example.com/tls/ca.crt
+export CORE_PEER_MSPCONFIGPATH=${PWD}/organizations/peerOrganizations/companybranch.example.com/users/Admin@companybranch.example.com/msp
+export CORE_PEER_ADDRESS=localhost:7051
+
+- Admin of Stationery Company:
+export CORE_PEER_TLS_ENABLED=true
+export CORE_PEER_LOCALMSPID="StationeryCompanyMSP"
+export CORE_PEER_TLS_ROOTCERT_FILE=${PWD}/organizations/peerOrganizations/stationerycompany.example.com/peers/peer0.stationerycompany.example.com/tls/ca.crt
+export CORE_PEER_MSPCONFIGPATH=${PWD}/organizations/peerOrganizations/stationerycompany.example.com/users/Admin@stationerycompany.example.com/msp
+export CORE_PEER_ADDRESS=localhost:8051
+
+- Admin of Supplier:
+export CORE_PEER_TLS_ENABLED=true
+export CORE_PEER_LOCALMSPID="SupplierMSP"
+export CORE_PEER_TLS_ROOTCERT_FILE=${PWD}/organizations/peerOrganizations/supplier.example.com/peers/peer0.supplier.example.com/tls/ca.crt
+export CORE_PEER_MSPCONFIGPATH=${PWD}/organizations/peerOrganizations/supplier.example.com/users/Admin@supplier.example.com/msp
+export CORE_PEER_ADDRESS=localhost:9051
+
+- Admin of Delivery Company:
+export CORE_PEER_TLS_ENABLED=true
+export CORE_PEER_LOCALMSPID="DeliveryCompanyMSP"
+export CORE_PEER_TLS_ROOTCERT_FILE=${PWD}/organizations/peerOrganizations/deliverycompany.example.com/peers/peer0.deliverycompany.example.com/tls/ca.crt
+export CORE_PEER_MSPCONFIGPATH=${PWD}/organizations/peerOrganizations/deliverycompany.example.com/users/Admin@deliverycompany.example.com/msp
+export CORE_PEER_ADDRESS=localhost:10051
+
+>Set & Operate as organization peer admin first
+>Then, create the channel
+peer channel create -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com -c channel1 -f ./channel-artifacts/channel1.tx --outputBlock ./channel-artifacts/channel1.block --tls --cafile "${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem"
+
+>Join channel as the organization
+>Remember to Set & Operate as other organization peer admin if needed
+peer channel join -b ./channel-artifacts/channel1.block
+
+>Set & Operate as other organization peer admin
+>Join the related channel
+
+>Channel Access table
+
+>>Inventory & Order Preset Record
+-->>channel 1 : Company Branch
+
+>>Order Record
+-->>channel 2 : Company Branch, Stationery Company, Supplier
+
+>>Delivery Record
+-->>channel 3 : Company Branch, Supplier, Delivery Company
+
+peer channel fetch 0 ./channel-artifacts/channel_org2.block -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com -c channel1 --tls --cafile "${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem"
+
+>>CREATE ANCHOR PEER SECTION<<
+
+>Set & Operate as organization peer admin
+>Set Anchor Peer in the channel correspond to the organization
+>Repeat entire section if theres other organization in the channel
+
+>Fetch config of the channel
+peer channel fetch config channel-artifacts/config_block.pb -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com -c channel1 --tls --cafile "${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem"
+
+cd channel-artifacts
+
+configtxlator proto_decode --input config_block.pb --type common.Block --output config_block.json
+
+jq '.data.data[0].payload.data.config' config_block.json > config.json
+
+cp config.json config_copy.json
+
+jq '.channel_group.groups.Application.groups.Org2MSP.values += {"AnchorPeers":{"mod_policy": "Admins","value":{"anchor_peers": [{"host": "peer0.org2.example.com","port": 9051}]},"version": "0"}}' config_copy.json > modified_config.json
+
+configtxlator proto_encode --input config.json --type common.Config --output config.pb
+configtxlator proto_encode --input modified_config.json --type common.Config --output modified_config.pb
+configtxlator compute_update --channel_id channel1 --original config.pb --updated modified_config.pb --output config_update.pb
+
+configtxlator proto_decode --input config_update.pb --type common.ConfigUpdate --output config_update.json
+echo '{"payload":{"header":{"channel_header":{"channel_id":"channel1", "type":2}},"data":{"config_update":'$(cat config_update.json)'}}}' | jq . > config_update_in_envelope.json
+configtxlator proto_encode --input config_update_in_envelope.json --type common.Envelope --output config_update_in_envelope.pb
+
+cd ..
+
+//If theres change
+//peer channel update -f channel-artifacts/config_update_in_envelope.pb -c channel1 -o localhost:7050  --ordererTLSHostnameOverride orderer.example.com --tls --cafile "${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem"
+
+//////////////////////////////////////////////////////////////////////////////////////////////////
+>>SIMPLIFIED OF CHANNEL & ANCHOR PEER CREATION SECTION<<
+
+//Due to createChannel.sh being modified,
+//It will finish all the job of creation and joining all organization at once
+
+./network.sh createChannel -c channel1
+./network.sh createChannel -c channel2
+./network.sh createChannel -c channel3
+
+>Channel Access table
+
+>>Inventory & Order Preset Record
+-->>channel 1 : Company Branch
+
+>>Order Record
+-->>channel 2 : Company Branch, Stationery Company, Supplier
+
+>>Delivery Record
+-->>channel 3 : Company Branch, Supplier, Delivery Company
+
+
+>>DEPLOY CHAINCODE SECTION<<
+
+>Remember to set as Admin of organization to corresponding channel
+/*
+export FABRIC_CFG_PATH=$PWD/../config/
+export CORE_PEER_TLS_ENABLED=true
+export CORE_PEER_LOCALMSPID="CompanyBranchMSP"
+export CORE_PEER_TLS_ROOTCERT_FILE=${PWD}/organizations/peerOrganizations/companybranch.example.com/peers/peer0.companybranch.example.com/tls/ca.crt
+export CORE_PEER_MSPCONFIGPATH=${PWD}/organizations/peerOrganizations/companybranch.example.com/users/Admin@companybranch.example.com/msp
+export CORE_PEER_ADDRESS=localhost:7051
+
+peer channel getinfo -c channel1
+peer channel getinfo -c channel2
+peer channel getinfo -c channel3
+*/
+
+##Deploy chaincode to each channel
+##./network.sh deployCC -ccn basic -ccp <go script directory> -ccl go -c <channel> -cci <triggerFunction>
+./network.sh deployCC -ccn basic -ccp ../asset-transfer-basic/chaincode-go/ -ccl go -c channel1 -cci InitLedger
+./network.sh deployCC -ccn basic -ccp ../asset-transfer-basic/chaincode-go/ -ccl go -c channel2 -cci InitLedger
+./network.sh deployCC -ccn basic -ccp ../asset-transfer-basic/chaincode-go/ -ccl go -c channel3 -cci InitLedger
+
+##Now you can access data in the channel (Set as Admin of member of the corresponding channel)
+##peer chaincode query -C <channel> -n <asset-transfer folder type> -c '{"Args":["getAllAssets"]}'
+peer chaincode query -C channel1 -n basic -c '{"Args":["getAllOrderPresets"]}'
+peer chaincode query -C channel2 -n basic -c '{"Args":["getAllOrders"]}'
+peer chaincode query -C channel3 -n basic -c '{"Args":["getAllDeliveryRecords"]}'
+
+
+#DEMO STARTER PACK:
+cd supplychain_fabric/test-network
+./network.sh up createChannel -c channel1
+./network.sh up createChannel -c channel2
+./network.sh up createChannel -c channel3
+./network.sh deployCC -ccn basic -ccp ../asset-transfer-basic/chaincode-go/ -ccl go -c channel1 -cci InitLedger
+./network.sh deployCC -ccn basic -ccp ../asset-transfer-basic/chaincode-go/ -ccl go -c channel2 -cci InitLedger
+./network.sh deployCC -ccn basic -ccp ../asset-transfer-basic/chaincode-go/ -ccl go -c channel3 -cci InitLedger
+
+./network.sh down
+
+Company Branch:
+-View Order
+-Add New Order
+-View Delivery
+-Update Inventory
+-Update Order Preset
+
+1. Entering order page 3s
+2. click "view", check detail, 3s
+2.1 entering delivery page
+2.2 click "view", check detail, 3s
+3. Go to add order, try add order with IN0004
+4. check order again to see the newly added order
+5. update order preset
+6. update inventory
+7. update inventory until lower than minimum limit
+8. check the newly added order due to low stock
+
+
+Stationery Company & Supplier:
+-View Order
+-Update Order Status
+-View Delivery
+
+->Stationery Company:
+1. View Order
+2. Update Order Status to approved
+3. Update Order Status to reject
+4. View Delivery
+
+->Supplier:
+1. View Order
+2. View Delivery
+3. Update Order Status to decline
+4. Update Order Status to confirm
+5. go check delivery for newly added delivery
+
+Delivery Company:
+1. View Delivery
+2. Update Delivery Status
+
+3. Update Delivery Status as failed
+->Login as company branch
+-->check order status
+
+4.Update Delivery Status as completed
+->Login as company branch
+-->check order status
+-->check its inventory value
+
+
+
