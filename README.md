@@ -1,12 +1,12 @@
-Blockchain-Based Supply-Chain Management System
+<h1>Blockchain-Based Supply-Chain Management System</h1>
 
 The Blockchain-Based Stationery Supply Chain Management System utilizes Hyperledger Fabric for establishing a secure and efficient blockchain network. This framework ensures data integrity and immutability. Complementing this, the system incorporates ReactJS for its front-end interface, providing a user-friendly experience. Through this integration, stakeholders benefit from enhanced transparency, security, and real-time tracking capabilities in the stationery supply chain.
 
-Demo Video:-
+<h2>Demo Video</h2>
 
 [![Video](https://img.youtube.com/vi/_WOUKN6MaBw/hqdefault.jpg)](https://youtu.be/_WOUKN6MaBw)
 
-Installation/Setup:-
+<h2>Installation/Setup</h2>
 This folder contains two main folders: supplychain and supplychain_fabric.
 
 Front-end and Node.js Application (supplychain)
